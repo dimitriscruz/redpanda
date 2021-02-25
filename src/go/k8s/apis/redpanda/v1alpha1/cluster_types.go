@@ -78,6 +78,9 @@ type RedpandaConfig struct {
 	KafkaAPI	SocketAddress	`json:"kafkaApi,omitempty"`
 	AdminAPI	SocketAddress	`json:"admin,omitempty"`
 	DeveloperMode	bool		`json:"developerMode,omitempty"`
+	// KafkaAPITLSEnabled when true, looks for redpanda-operator-tls Secret
+	// this secret should have values of cert, key, truststore
+	KafkaAPITLSEnabled	bool	`json:"kafkaApiTlsEnabled,omitempty"`
 }
 
 // SocketAddress provide the way to configure the port

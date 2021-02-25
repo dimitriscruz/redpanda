@@ -11,11 +11,11 @@ spec:
   replicas: 1
   resources:
     requests:
-      cpu: 1
-      memory: 1.2Gi
+      cpu: 100m
+      memory: 100Mi
     limits:
       cpu: 1
-      memory: 1.2Gi
+      memory: 100Mi
   configuration:
     rpcServer:
       port: 33145
@@ -24,3 +24,4 @@ spec:
     admin:
       port: 9644
     developerMode: true
+    kafkaApiTlsEnabled: true

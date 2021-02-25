@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strconv"
 
 	"github.com/go-logr/logr"
 	redpandav1alpha1 "github.com/vectorizedio/redpanda/src/go/k8s/apis/redpanda/v1alpha1"
@@ -146,11 +145,6 @@ func updateReplicasIfNeeded(
 func (r *StatefulSetResource) Obj() (k8sclient.Object, error) {
 	var configMapDefaultMode int32 = 0754
 
-	memory, exist := r.pandaCluster.Spec.Resources.Limits["memory"]
-	if !exist {
-		memory = resource.MustParse("2Gi")
-	}
-
 	var clusterLabels = labels.ForCluster(r.pandaCluster)
 
 	ss := &appsv1.StatefulSet{
@@ -231,7 +225,6 @@ func (r *StatefulSetResource) Obj() (k8sclient.Object, error) {
 								"start",
 								"--check=false",
 								"--smp 1",
-								"--memory " + strconv.FormatInt(memory.Value(), 10),
 								"--reserve-memory 0M",
 								r.portsConfiguration(),
 								"--",
@@ -348,6 +341,21 @@ func (r *StatefulSetResource) Obj() (k8sclient.Object, error) {
 				},
 			},
 		},
+	}
+
+	if r.pandaCluster.Spec.Configuration.KafkaAPITLSEnabled {
+		ss.Spec.Template.Spec.Containers[0].VolumeMounts = append(ss.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name:		"tlscert",
+			MountPath:	tlsDir,
+		})
+		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name:	"tlscert",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "redpanda-tls",
+				},
+			},
+		})
 	}
 
 	err := controllerutil.SetControllerReference(r.pandaCluster, ss, r.scheme)

@@ -34,6 +34,7 @@ const (
 	dataDirectory	= "/var/lib/redpanda/data"
 	fsGroup		= 101
 
+	tlsDir			= "/etc/tls/certs"
 	configDir		= "/etc/redpanda"
 	configuratorDir		= "/mnt/operator"
 	configuratorScript	= "configurator.sh"
@@ -170,6 +171,13 @@ func (r *ConfigMapResource) createConfiguration() *config.Config {
 		},
 	}
 	cr.Directory = dataDirectory
+	if r.pandaCluster.Spec.Configuration.KafkaAPITLSEnabled {
+		cr.KafkaApiTLS = config.ServerTLS{
+			KeyFile:	fmt.Sprintf("%s/tls.key", tlsDir),
+			CertFile:	fmt.Sprintf("%s/tls.crt", tlsDir),
+			Enabled:	true,
+		}
+	}
 
 	return cfgRpk
 }

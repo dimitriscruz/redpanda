@@ -53,6 +53,10 @@ spec:
                       port:
                         type: integer
                     type: object
+                  kafkaApiTlsEnabled:
+                    description: KafkaAPITLSEnabled when true, looks for redpanda-operator-tls
+                      Secret this secret should have values of cert, key, truststore
+                    type: boolean
                   rpcServer:
                     description: SocketAddress provide the way to configure the port
                     properties:

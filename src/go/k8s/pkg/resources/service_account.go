@@ -50,18 +50,24 @@ func NewServiceAccount(
 }
 
 // Ensure manages ServiceAccount that is used in initContainer
+// nolint:dupl // similar to HeadlessServiceResource
 func (s *ServiceAccountResource) Ensure(ctx context.Context) error {
-	if s.pandaCluster.ExternalListener() == nil {
-		return nil
-	}
-
 	obj, err := s.obj()
 	if err != nil {
 		return fmt.Errorf("unable to construct ServiceAccount object: %w", err)
 	}
 
-	_, err = CreateIfNotExists(ctx, s, obj, s.logger)
-	return err
+	created, err := CreateIfNotExists(ctx, s, obj, s.logger)
+	if err != nil || created {
+		return err
+	}
+
+	var sa corev1.ServiceAccount
+	err = s.Get(ctx, s.Key(), &sa)
+	if err != nil {
+		return fmt.Errorf("error while fetching ServiceAccount resource: %w", err)
+	}
+	return Update(ctx, &sa, obj, s.Client, s.logger)
 }
 
 // obj returns resource managed client.Object

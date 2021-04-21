@@ -600,10 +600,7 @@ func (r *StatefulSetResource) getNodePort() string {
 }
 
 func (r *StatefulSetResource) getServiceAccountName() string {
-	if r.pandaCluster.ExternalListener() != nil {
-		return r.serviceAccountName
-	}
-	return ""
+	return r.serviceAccountName
 }
 
 // Key returns namespace/name object that is used to identify object.

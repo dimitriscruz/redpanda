@@ -40,6 +40,12 @@ const (
 	externalConnectivityEnvVar          = "EXTERNAL_CONNECTIVITY"
 	externalConnectivitySubDomainEnvVar = "EXTERNAL_CONNECTIVITY_SUBDOMAIN"
 	hostPortEnvVar                      = "HOST_PORT"
+
+	podNamespaceEnvVar = "POD_NAMESPACE"
+	useK8sAPIEnvVar    = "USE_K8S_API"
+
+	externalKafkaListenerPortName = "kafka-external"
+	internalKafkaListenerPortName = "kafka"
 )
 
 type brokerID int
@@ -50,10 +56,12 @@ type configuratorConfig struct {
 	configSourceDir      string
 	configDestination    string
 	nodeName             string
-	subdomain            string
-	externalConnectivity bool
-	redpandaRPCPort      int
-	hostPort             int
+	subdomain            string // Deprecated
+	externalConnectivity bool   // Deprecated
+	redpandaRPCPort      int    // Deprecated
+	hostPort             int    // Deprecated
+	podNamespace         string
+	useK8sAPI            bool
 }
 
 func (c *configuratorConfig) String() string {
@@ -66,7 +74,9 @@ func (c *configuratorConfig) String() string {
 		"externalConnectivity: %t\n"+
 		"externalConnectivitySubdomain: %s\n"+
 		"redpandaRPCPort: %d\n"+
-		"hostPort: %d\n",
+		"hostPort: %d\n"+
+		"podNamespace: %s\n"+
+		"useK8sAPI: %t\n",
 		c.hostName,
 		c.svcFQDN,
 		c.configSourceDir,
@@ -75,10 +85,14 @@ func (c *configuratorConfig) String() string {
 		c.externalConnectivity,
 		c.subdomain,
 		c.redpandaRPCPort,
-		c.hostPort)
+		c.hostPort,
+		c.podNamespace,
+		c.useK8sAPI)
 }
 
 var errorMissingEnvironmentVariable = errors.New("missing environment variable")
+var errorExternalPortMissing = errors.New("port configuration is missing external port")
+var errInternalPortMissing = errors.New("port configration is missing internal port")
 
 func main() {
 	log.Print("The redpanda configurator is starting")
@@ -97,10 +111,6 @@ func main() {
 		log.Fatalf("%s", fmt.Errorf("unable to read the redpanda configuration file: %w", err))
 	}
 
-	kafkaAPIPort, err := getInternalKafkaAPIPort(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
 	hostIndex, err := hostIndex(c.hostName)
 	if err != nil {
 		log.Fatalf("%s", fmt.Errorf("unable to extract host index: %w", err))
@@ -108,9 +118,16 @@ func main() {
 
 	log.Printf("Host index calculated %d", hostIndex)
 
-	err = registerAdvertisedKafkaAPI(&c, cfg, hostIndex, kafkaAPIPort)
-	if err != nil {
-		log.Fatalf("%s", fmt.Errorf("unable to register advertised kafka API: %w", err))
+	if c.useK8sAPI && c.podNamespace != "" {
+		err = registerAdvertisedKafkaAPIUsingK8sAPI(&c, cfg, hostIndex)
+		if err != nil {
+			log.Fatalf("%s", fmt.Errorf("unable to register advertised kafka API (using k8s API): %w", err))
+		}
+	} else {
+		err = registerAdvertisedKafkaAPI(&c, cfg, hostIndex)
+		if err != nil {
+			log.Fatalf("%s", fmt.Errorf("unable to register advertised kafka API: %w", err))
+		}
 	}
 
 	cfg.Redpanda.Id = int(hostIndex)
@@ -135,8 +152,6 @@ func main() {
 	log.Printf("Configuration saved to: %s", c.configDestination)
 }
 
-var errInternalPortMissing = errors.New("port configration is missing internal port")
-
 func getInternalKafkaAPIPort(cfg *config.Config) (int, error) {
 	for _, l := range cfg.Redpanda.KafkaApi {
 		if l.Name == "kafka" {
@@ -147,8 +162,12 @@ func getInternalKafkaAPIPort(cfg *config.Config) (int, error) {
 }
 
 func registerAdvertisedKafkaAPI(
-	c *configuratorConfig, cfg *config.Config, index brokerID, kafkaAPIPort int,
+	c *configuratorConfig, cfg *config.Config, index brokerID,
 ) error {
+	kafkaAPIPort, err := getInternalKafkaAPIPort(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 	cfg.Redpanda.AdvertisedKafkaApi = []config.NamedSocketAddress{
 		{
 			SocketAddress: config.SocketAddress{
@@ -216,6 +235,7 @@ func checkEnvVars() (configuratorConfig, error) {
 	var extCon string
 	var rpcPort string
 	var hostPort string
+	var useK8sAPI string
 
 	c := configuratorConfig{}
 
@@ -289,6 +309,23 @@ func checkEnvVars() (configuratorConfig, error) {
 		result = multierror.Append(result, fmt.Errorf("unable to convert host port from string to int: %w", err))
 	}
 
+	useK8sAPI, exist = os.LookupEnv(useK8sAPIEnvVar)
+	if !exist {
+		return c, result
+	}
+
+	// Use of Kubernetes API
+	c.useK8sAPI, err = strconv.ParseBool(useK8sAPI)
+	if err != nil {
+		result = multierror.Append(result, fmt.Errorf("unable to parse bool: %w", err))
+	}
+	if c.useK8sAPI {
+		// Requires that the namespace is provided
+		c.podNamespace, exist = os.LookupEnv(podNamespaceEnvVar)
+		if !exist {
+			result = multierror.Append(result, fmt.Errorf("%s %w", podNamespaceEnvVar, errorMissingEnvironmentVariable))
+		}
+	}
 	return c, result
 }
 

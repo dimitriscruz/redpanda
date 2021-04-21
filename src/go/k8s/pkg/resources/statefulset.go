@@ -338,6 +338,19 @@ func (r *StatefulSetResource) obj() (k8sclient.Object, error) {
 									Name:  "HOST_PORT",
 									Value: r.getNodePort(),
 								},
+								{
+									Name: "POD_NAMESPACE",
+									ValueFrom: &corev1.EnvVarSource{
+										FieldRef: &corev1.ObjectFieldSelector{
+											APIVersion: "v1",
+											FieldPath:  "metadata.namespace",
+										},
+									},
+								},
+								{
+									Name:  "USE_K8S_API",
+									Value: strconv.FormatBool(true),
+								},
 							},
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser:  pointer.Int64Ptr(userID),

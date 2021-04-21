@@ -11,6 +11,7 @@ package resources
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	redpandav1alpha1 "github.com/vectorizedio/redpanda/src/go/k8s/apis/redpanda/v1alpha1"
@@ -50,11 +51,18 @@ func NewClusterRole(
 
 // Ensure manages v1.ClusterRole that is assigned to v1.ServiceAccount used in initContainer
 func (r *ClusterRoleResource) Ensure(ctx context.Context) error {
-	if r.pandaCluster.ExternalListener() == nil {
-		return nil
+	obj := r.obj()
+	created, err := CreateIfNotExists(ctx, r, obj, r.logger)
+	if err != nil || created {
+		return err
 	}
-	_, err := CreateIfNotExists(ctx, r, r.obj(), r.logger)
-	return err
+
+	var role v1.ClusterRole
+	err = r.Get(ctx, r.Key(), &role)
+	if err != nil {
+		return fmt.Errorf("error while fetching ClusterRole resource: %w", err)
+	}
+	return Update(ctx, &role, obj, r.Client, r.logger)
 }
 
 // obj returns resource managed client.Object
@@ -76,7 +84,12 @@ func (r *ClusterRoleResource) obj() k8sclient.Object {
 			{
 				Verbs:     []string{"get"},
 				APIGroups: []string{corev1.GroupName},
-				Resources: []string{"nodes"},
+				Resources: []string{"nodes", "services"},
+			},
+			{
+				Verbs:     []string{"get"},
+				APIGroups: []string{redpandav1alpha1.GroupVersion.Group},
+				Resources: []string{"clusters"},
 			},
 		},
 	}

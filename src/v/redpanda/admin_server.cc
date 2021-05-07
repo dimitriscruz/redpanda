@@ -13,6 +13,7 @@
 
 #include "cluster/cluster_utils.h"
 #include "cluster/controller.h"
+#include "cluster/errc.h"
 #include "cluster/fwd.h"
 #include "cluster/partition_manager.h"
 #include "cluster/security_frontend.h"
@@ -266,14 +267,14 @@ parse_scram_credential(const rapidjson::Document& doc) {
 
     if (!doc.HasMember("algorithm") || !doc["algorithm"].IsString()) {
         throw ss::httpd::bad_request_exception(
-          fmt::format("String algo missing"));
+          fmt::format("String algorithm missing"));
     }
     const auto algorithm = std::string_view(
       doc["algorithm"].GetString(), doc["algorithm"].GetStringLength());
 
     if (!doc.HasMember("password") || !doc["password"].IsString()) {
         throw ss::httpd::bad_request_exception(
-          fmt::format("String password smissing"));
+          fmt::format("String password missing"));
     }
     const auto password = doc["password"].GetString();
 
@@ -316,9 +317,16 @@ void admin_server::register_security_routes() {
             .create_user(username, credential, model::timeout_clock::now() + 5s)
             .then([](std::error_code err) {
                 vlog(logger.debug, "Creating user {}:{}", err, err.message());
+
+                auto msg = fmt::format("Creating user: {}", err.message());
+
+                if (err == cluster::errc::user_exists) {
+                    throw ss::httpd::base_exception(
+                      msg,
+                      ss::httpd::reply::status_type::conflict);
+                }
                 if (err) {
-                    throw ss::httpd::bad_request_exception(
-                      fmt::format("Creating user: {}", err.message()));
+                    throw ss::httpd::bad_request_exception(msg);
                 }
                 return ss::make_ready_future<ss::json::json_return_type>(
                   ss::json::json_return_type(ss::json::json_void()));
